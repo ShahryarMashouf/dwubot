@@ -4,3 +4,4 @@ youtube-api-python
 aiohttp
 youtube-api
 google-api-python-client
+youtube-data-api
