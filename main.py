@@ -4,6 +4,8 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, JobQueue
 from youtube_api import YoutubeDataAPI # <--- اصلاح شد
 import google.generativeai as genai
+from googleapiclient.discovery import build
+
 
 # --- بخش تنظیمات اصلی ---
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
