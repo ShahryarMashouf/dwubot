@@ -5,12 +5,22 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from googleapiclient.discovery import build
 import google.generativeai as genai
 
+
+
+
 # --- تنظیمات ---
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 YOUTUBE_CHANNEL_ID = os.getenv('YOUTUBE_CHANNEL_ID')
 TARGET_GROUP_ID = int(os.getenv('TARGET_GROUP_ID', 0))
+
+print("TELEGRAM_TOKEN:", TELEGRAM_TOKEN)
+print("GEMINI_API_KEY:", GEMINI_API_KEY)
+print("YOUTUBE_API_KEY:", YOUTUBE_API_KEY)
+print("YOUTUBE_CHANNEL_ID:", YOUTUBE_CHANNEL_ID)
+print("TARGET_GROUP_ID:", TARGET_GROUP_ID)
+
 
 if not all([TELEGRAM_TOKEN, GEMINI_API_KEY, YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID, TARGET_GROUP_ID]):
     raise ValueError("One or more environment variables are not set!")
@@ -138,8 +148,3 @@ if __name__ == "__main__":
 
 
 
-print("TELEGRAM_TOKEN:", TELEGRAM_TOKEN)
-print("GEMINI_API_KEY:", GEMINI_API_KEY)
-print("YOUTUBE_API_KEY:", YOUTUBE_API_KEY)
-print("YOUTUBE_CHANNEL_ID:", YOUTUBE_CHANNEL_ID)
-print("TARGET_GROUP_ID:", TARGET_GROUP_ID)
