@@ -2,12 +2,10 @@ import os
 import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, JobQueue
-from youtube_api import YoutubeDataAPI # <--- اصلاح شد
-import google.generativeai as genai
 from googleapiclient.discovery import build
+import google.generativeai as genai
 
-
-# --- بخش تنظیمات اصلی ---
+# --- تنظیمات ---
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
@@ -27,25 +25,33 @@ AD_MESSAGE = f"""
 
 همین حالا سابسکرایب کنید: {YOUTUBE_CHANNEL_LINK}
 """
+
 FORBIDDEN_WORDS = ['کلاهبردار', 'دروغگو', 'فحش_مثال_۱', 'فحش_مثال_۲']
 TRIGGER_WORDS = ['مهاجرت', 'ویزا', 'آلمان', 'اقامت', 'کار', 'سفارت', 'تحصیلی', 'جاب آفر']
 
-# --- بخش هوش مصنوعی و یوتیوب ---
+# --- تنظیم هوش مصنوعی ---
 genai.configure(api_key=GEMINI_API_KEY)
-yt_api = YoutubeDataAPI(YOUTUBE_API_KEY) # <--- اصلاح شد
 
 def search_youtube_video(query: str) -> str:
     try:
-        search_result = yt_api.search(q=query, channel_id=YOUTUBE_CHANNEL_ID, max_results=1)
-        if search_result:
-            video_id = search_result[0]['video_id']
-            video_title = search_result[0]['video_title']
+        youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+        request = youtube.search().list(
+            q=query,
+            part="snippet",
+            channelId=YOUTUBE_CHANNEL_ID,
+            maxResults=1,
+            type="video"
+        )
+        response = request.execute()
+        if response["items"]:
+            video_id = response["items"][0]["id"]["videoId"]
+            video_title = response["items"][0]["snippet"]["title"]
             video_link = f"https://www.youtube.com/watch?v={video_id}"
             print(f"Related video found: {video_title}")
             return video_link
     except Exception as e:
         print(f"Error searching YouTube: {e}")
-    
+
     print("No specific video found. Returning main channel link.")
     return YOUTUBE_CHANNEL_LINK
 
@@ -67,7 +73,7 @@ def get_ai_response(question: str) -> str:
     4. اگر لینک به صفحه اصلی کانال (شامل "/channel/") اشاره دارد، آن را به عنوان "کانال اصلی یوتیوب" معرفی کنید و بگویید که ویدیوی دقیقی یافت نشده اما کاربر می‌تواند در کانال به دنبال مطالب مشابه بگردد.
     5. پاسخ شما باید فقط در مورد مهاجرت به آلمان باشد. اگر سوال نامرتبط بود، با احترام بگویید که فقط در این زمینه تخصص دارید.
     """
-    
+
     try:
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
         response = model.generate_content(prompt)
@@ -105,9 +111,7 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
     print(f"New private message from user {update.message.from_user.username}: {user_message}")
     
     thinking_message = await update.message.reply_text("🧠 در حال فکر کردن...")
-    
     ai_response = get_ai_response(user_message)
-    
     await thinking_message.edit_text(ai_response)
 
 async def send_scheduled_ad(context: ContextTypes.DEFAULT_TYPE) -> None:
