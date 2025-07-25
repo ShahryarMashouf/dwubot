@@ -1,7 +1,4 @@
 python-telegram-bot==20.7
 google-generativeai
-youtube-api-python
-aiohttp
-youtube-api
 google-api-python-client
-youtube-data-api
+aiohttp
