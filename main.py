@@ -135,3 +135,11 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+print("TELEGRAM_TOKEN:", TELEGRAM_TOKEN)
+print("GEMINI_API_KEY:", GEMINI_API_KEY)
+print("YOUTUBE_API_KEY:", YOUTUBE_API_KEY)
+print("YOUTUBE_CHANNEL_ID:", YOUTUBE_CHANNEL_ID)
+print("TARGET_GROUP_ID:", TARGET_GROUP_ID)
