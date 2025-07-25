@@ -1,19 +1,17 @@
-import os # این کتابخانه برای خواندن متغیرهای محیطی است
+import os
 import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, JobQueue
-from youtube_api import YouTubeDataAPI
+from youtube_api import YoutubeDataApi # <--- اصلاح شد
 import google.generativeai as genai
 
-# --- بخش تنظیمات اصلی (تغییر یافته) ---
-# خواندن توکن‌ها از متغیرهای محیطی
+# --- بخش تنظیمات اصلی ---
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 YOUTUBE_CHANNEL_ID = os.getenv('YOUTUBE_CHANNEL_ID')
-TARGET_GROUP_ID = int(os.getenv('TARGET_GROUP_ID', 0)) # تبدیل به عدد صحیح
+TARGET_GROUP_ID = int(os.getenv('TARGET_GROUP_ID', 0))
 
-# بررسی اینکه آیا تمام متغیرها به درستی تنظیم شده‌اند
 if not all([TELEGRAM_TOKEN, GEMINI_API_KEY, YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID, TARGET_GROUP_ID]):
     raise ValueError("One or more environment variables are not set!")
 
@@ -30,9 +28,9 @@ AD_MESSAGE = f"""
 FORBIDDEN_WORDS = ['کلاهبردار', 'دروغگو', 'فحش_مثال_۱', 'فحش_مثال_۲']
 TRIGGER_WORDS = ['مهاجرت', 'ویزا', 'آلمان', 'اقامت', 'کار', 'سفارت', 'تحصیلی', 'جاب آفر']
 
-# --- بقیه کد بدون تغییر باقی می‌ماند ---
+# --- بخش هوش مصنوعی و یوتیوب ---
 genai.configure(api_key=GEMINI_API_KEY)
-yt_api = YouTubeDataAPI(YOUTUBE_API_KEY)
+yt_api = YoutubeDataApi(YOUTUBE_API_KEY) # <--- اصلاح شد
 
 def search_youtube_video(query: str) -> str:
     try:
@@ -50,6 +48,8 @@ def search_youtube_video(query: str) -> str:
     return YOUTUBE_CHANNEL_LINK
 
 def get_ai_response(question: str) -> str:
+    youtube_link = search_youtube_video(question)
+    
     prompt = f"""
     شما یک دستیار متخصص در زمینه مهاجرت کاری به آلمان هستید.
     وظیفه شما پاسخ دادن به سوالات کاربران بر اساس اطلاعات معتبر و ویدیوهای یک کانال یوتیوب است.
