@@ -1,6 +1,3 @@
 python-telegram-bot[job-queue]
-google-api-python-client
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
-requests
+google-generativeai
+youtube-api-python
