@@ -2,7 +2,7 @@ import os
 import asyncio
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from youtube_api import YoutubeDataAPI
+from youtube-api import YoutubeDataAPI
 import google.generativeai as genai
 
 # --- بخش تنظیمات اصلی ---
