@@ -2,7 +2,7 @@ import os
 import asyncio
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from youtube_api import YoutubeDataApi
+from youtube_api import YoutubeDataAPI
 import google.generativeai as genai
 
 # --- بخش تنظیمات اصلی ---
@@ -30,7 +30,7 @@ TRIGGER_WORDS = ['مهاجرت', 'ویزا', 'آلمان', 'اقامت', 'کار
 
 # --- بخش هوش مصنوعی و یوتیوب ---
 genai.configure(api_key=GEMINI_API_KEY)
-yt_api = YoutubeDataApi(YOUTUBE_API_KEY)
+yt_api = YoutubeDataAPI(YOUTUBE_API_KEY)
 
 def search_youtube_video(query: str) -> str:
     try:
