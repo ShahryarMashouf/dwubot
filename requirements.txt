@@ -3,3 +3,4 @@ google-generativeai
 youtube-api-python
 aiohttp
 youtube-api
+google-api-python-client
