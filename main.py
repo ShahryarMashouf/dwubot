@@ -3,22 +3,18 @@ import asyncio
 from collections import OrderedDict
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from youtube_api import YouTubeDataAPI
+from youtube_api import YoutubeDataApi
 import google.generativeai as genai
 
 # --- بخش تنظیمات حافظه پنهان (Cache) ---
 response_cache = OrderedDict()
 CACHE_MAX_SIZE = 100
 
-# --- بخش تنظیمات اصلی (تغییر یافته) ---
+# --- بخش تنظیمات اصلی ---
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 YOUTUBE_CHANNEL_ID = os.getenv('YOUTUBE_CHANNEL_ID')
-
-# --- بخش جدید: خواندن لیستی از شناسه‌های گروه ---
-# شما باید در Railway یک متغیر به نام TARGET_GROUP_IDS بسازید
-# و شناسه‌ها را با کاما از هم جدا کنید. مثال: -100123,-100456,-100789
 TARGET_GROUP_IDS_STR = os.getenv('TARGET_GROUP_IDS', '')
 TARGET_GROUP_IDS = [int(gid.strip()) for gid in TARGET_GROUP_IDS_STR.split(',') if gid.strip()]
 
@@ -37,7 +33,7 @@ TRIGGER_WORDS = ['مهاجرت', 'ویزا', 'آلمان', 'اقامت', 'کار
 
 # --- بخش هوش مصنوعی و یوتیوب ---
 genai.configure(api_key=GEMINI_API_KEY)
-yt_api = YouTubeDataAPI(YOUTUBE_API_KEY)
+yt_api = YoutubeDataApi(YOUTUBE_API_KEY)
 
 def search_youtube_video(query: str) -> str:
     try:
@@ -93,17 +89,26 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
         return
     message = update.message
     text = message.text
-    if any(word in text.lower() for word in FORBIDDEN_WORDS):
+    bot_username = context.bot.username.lower()
+    text_lower = text.lower()
+    
+    if any(word in text_lower for word in FORBIDDEN_WORDS):
         try:
             await message.delete()
             print(f"Forbidden word message from user {message.from_user.username} deleted.")
             return
         except Exception as e:
             print(f"Error deleting message: {e}")
-    if any(word in text.lower() for word in TRIGGER_WORDS):
-        print(f"Keyword triggered by message from {message.from_user.username}")
+
+    # --- خط تغییر یافته ---
+    # اگر کلمه کلیدی در پیام بود یا ربات تگ شده بود، پاسخ بده
+    if any(word in text_lower for word in TRIGGER_WORDS) or f"@{bot_username}" in text_lower:
+        # اگر ربات تگ شده بود، نام آن را از متن سوال حذف می‌کنیم
+        question = text.replace(f"@{context.bot.username}", "").strip()
+        
+        print(f"Bot triggered by message from {message.from_user.username}")
         thinking_message = await message.reply_text("🧠 در حال بررسی سوال شما...")
-        ai_response = get_ai_response(text)
+        ai_response = get_ai_response(question)
         await thinking_message.edit_text(ai_response)
 
 async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -113,21 +118,18 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
     ai_response = get_ai_response(user_message)
     await thinking_message.edit_text(ai_response)
 
-# --- بخش زمان‌بندی (تغییر یافته) ---
+# --- بخش زمان‌بندی با asyncio ---
 async def send_scheduled_ad_loop(application: Application) -> None:
-    """یک حلقه بی‌نهایت که پیام تبلیغاتی را به همه گروه‌های هدف ارسال می‌کند."""
     print("Scheduled messages loop started.")
     await asyncio.sleep(10)
     while True:
         print(f"Sending ad to groups: {TARGET_GROUP_IDS}")
-        # روی لیست شناسه‌ها حرکت کرده و پیام را به هر گروه ارسال می‌کند
         for group_id in TARGET_GROUP_IDS:
             try:
                 await application.bot.send_message(chat_id=group_id, text=AD_MESSAGE)
                 print(f"Ad message sent successfully to group {group_id}.")
             except Exception as e:
                 print(f"Failed to send message to group {group_id}. Error: {e}")
-        # برای 4 ساعت می‌خوابد
         await asyncio.sleep(4 * 3600)
 
 async def post_init(application: Application) -> None:
