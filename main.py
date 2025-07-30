@@ -1,9 +1,16 @@
 import os
 import asyncio
+from collections import OrderedDict # برای ساخت حافظه پنهان استفاده می‌شود
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 from youtube_api import YouTubeDataAPI
 import google.generativeai as genai
+
+# --- بخش جدید: تنظیمات حافظه پنهان (Cache) ---
+# یک دیکشنری برای ذخیره سوالات و پاسخ‌های تکراری
+response_cache = OrderedDict()
+# حداکثر تعداد آیتم‌هایی که در حافظه نگهداری می‌شود
+CACHE_MAX_SIZE = 100
 
 # --- بخش تنظیمات اصلی ---
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -16,13 +23,10 @@ if not all([TELEGRAM_TOKEN, GEMINI_API_KEY, YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID,
     raise ValueError("One or more environment variables are not set!")
 
 YOUTUBE_CHANNEL_LINK = f"https://www.youtube.com/channel/{YOUTUBE_CHANNEL_ID}"
-
 AD_MESSAGE = f"""
 ⭐ به دنبال مهاجرت به آلمان هستید؟ ⭐
-
 ما در کانال یوتیوب خود تمام مراحل را قدم به قدم توضیح داده‌ایم!
 از پیدا کردن کار تا گرفتن ویزا.
-
 همین حالا سابسکرایب کنید: {YOUTUBE_CHANNEL_LINK}
 """
 FORBIDDEN_WORDS = ['کلاهبردار', 'دروغگو', 'فحش_مثال_۱', 'فحش_مثال_۲']
@@ -43,11 +47,20 @@ def search_youtube_video(query: str) -> str:
             return video_link
     except Exception as e:
         print(f"Error searching YouTube: {e}")
-    
     print("No specific video found. Returning main channel link.")
     return YOUTUBE_CHANNEL_LINK
 
 def get_ai_response(question: str) -> str:
+    # --- بخش جدید: بررسی حافظه پنهان ---
+    # سوال را تمیز کرده تا جستجو در حافظه دقیق‌تر باشد
+    cache_key = question.lower().strip()
+    if cache_key in response_cache:
+        print(f"CACHE HIT: Found response for question: '{question}'")
+        # اگر پاسخ در حافظه بود، آن را برمی‌گردانیم
+        return response_cache[cache_key]
+    
+    print(f"CACHE MISS: No response found for: '{question}'. Calling APIs.")
+    # اگر پاسخ در حافظه نبود، با APIها تماس می‌گیریم
     youtube_link = search_youtube_video(question)
     prompt = f"""
     شما یک دستیار متخصص در زمینه مهاجرت کاری به آلمان هستید.
@@ -64,10 +77,19 @@ def get_ai_response(question: str) -> str:
     try:
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
         response = model.generate_content(prompt)
+        
+        ai_response = "پاسخ توسط فیلترهای ایمنی مسدود شد. لطفاً سوال دیگری بپرسید."
         if response.candidates:
-            return response.text
-        else:
-            return "پاسخ توسط فیلترهای ایمنی مسدود شد. لطفاً سوال دیگری بپرسید."
+            ai_response = response.text
+
+        # --- بخش جدید: ذخیره پاسخ در حافظه پنهان ---
+        # اگر حافظه پر شده بود، قدیمی‌ترین آیتم را حذف کن
+        if len(response_cache) >= CACHE_MAX_SIZE:
+            response_cache.popitem(last=False)
+        response_cache[cache_key] = ai_response
+        
+        return ai_response
+        
     except Exception as e:
         print(f"Error connecting to Gemini: {e}")
         return "متاسفانه در ارتباط با هوش مصنوعی مشکلی پیش آمده است."
@@ -77,18 +99,18 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
     if not update.message or not update.message.text:
         return
     message = update.message
-    text = message.text.lower()
-    if any(word in text for word in FORBIDDEN_WORDS):
+    text = message.text
+    if any(word in text.lower() for word in FORBIDDEN_WORDS):
         try:
             await message.delete()
             print(f"Forbidden word message from user {message.from_user.username} deleted.")
             return
         except Exception as e:
             print(f"Error deleting message: {e}")
-    if any(word in text for word in TRIGGER_WORDS):
+    if any(word in text.lower() for word in TRIGGER_WORDS):
         print(f"Keyword triggered by message from {message.from_user.username}")
         thinking_message = await message.reply_text("🧠 در حال بررسی سوال شما...")
-        ai_response = get_ai_response(message.text)
+        ai_response = get_ai_response(text)
         await thinking_message.edit_text(ai_response)
 
 async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -98,11 +120,9 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
     ai_response = get_ai_response(user_message)
     await thinking_message.edit_text(ai_response)
 
-# --- بخش جدید: حلقه زمان‌بندی با asyncio ---
+# --- بخش زمان‌بندی با asyncio (بدون تغییر) ---
 async def send_scheduled_ad_loop(application: Application) -> None:
-    """یک حلقه بی‌نهایت که در پس‌زمینه اجرا شده و پیام تبلیغاتی ارسال می‌کند."""
     print("Scheduled messages loop started.")
-    # 10 ثانیه صبر اولیه قبل از شروع حلقه
     await asyncio.sleep(10)
     while True:
         try:
@@ -110,22 +130,15 @@ async def send_scheduled_ad_loop(application: Application) -> None:
             print("Scheduled ad message sent successfully.")
         except Exception as e:
             print(f"Error sending scheduled message: {e}")
-        # برای 4 ساعت می‌خوابد (4 * 3600 ثانیه)
         await asyncio.sleep(4 * 3600)
 
 async def post_init(application: Application) -> None:
-    """این تابع پس از راه‌اندازی ربات، حلقه زمان‌بندی را در پس‌زمینه اجرا می‌کند."""
     asyncio.create_task(send_scheduled_ad_loop(application))
 
 def main() -> None:
-    """راه‌اندازی و اجرای ربات."""
-    # --- بخش جدید: اضافه کردن post_init به سازنده ---
     application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
-
-    # تعریف دستورها و پردازشگرها
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_group_messages))
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_private_message))
-
     print("Group manager and private message bot is running...")
     application.run_polling()
 
