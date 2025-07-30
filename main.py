@@ -1,26 +1,29 @@
 import os
 import asyncio
-from collections import OrderedDict # برای ساخت حافظه پنهان استفاده می‌شود
+from collections import OrderedDict
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 from youtube_api import YouTubeDataAPI
 import google.generativeai as genai
 
-# --- بخش جدید: تنظیمات حافظه پنهان (Cache) ---
-# یک دیکشنری برای ذخیره سوالات و پاسخ‌های تکراری
+# --- بخش تنظیمات حافظه پنهان (Cache) ---
 response_cache = OrderedDict()
-# حداکثر تعداد آیتم‌هایی که در حافظه نگهداری می‌شود
 CACHE_MAX_SIZE = 100
 
-# --- بخش تنظیمات اصلی ---
+# --- بخش تنظیمات اصلی (تغییر یافته) ---
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 YOUTUBE_CHANNEL_ID = os.getenv('YOUTUBE_CHANNEL_ID')
-TARGET_GROUP_ID = int(os.getenv('TARGET_GROUP_ID', 0))
 
-if not all([TELEGRAM_TOKEN, GEMINI_API_KEY, YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID, TARGET_GROUP_ID]):
-    raise ValueError("One or more environment variables are not set!")
+# --- بخش جدید: خواندن لیستی از شناسه‌های گروه ---
+# شما باید در Railway یک متغیر به نام TARGET_GROUP_IDS بسازید
+# و شناسه‌ها را با کاما از هم جدا کنید. مثال: -100123,-100456,-100789
+TARGET_GROUP_IDS_STR = os.getenv('TARGET_GROUP_IDS', '')
+TARGET_GROUP_IDS = [int(gid.strip()) for gid in TARGET_GROUP_IDS_STR.split(',') if gid.strip()]
+
+if not all([TELEGRAM_TOKEN, GEMINI_API_KEY, YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID, TARGET_GROUP_IDS]):
+    raise ValueError("One or more environment variables are not set or TARGET_GROUP_IDS is empty!")
 
 YOUTUBE_CHANNEL_LINK = f"https://www.youtube.com/channel/{YOUTUBE_CHANNEL_ID}"
 AD_MESSAGE = f"""
@@ -51,16 +54,12 @@ def search_youtube_video(query: str) -> str:
     return YOUTUBE_CHANNEL_LINK
 
 def get_ai_response(question: str) -> str:
-    # --- بخش جدید: بررسی حافظه پنهان ---
-    # سوال را تمیز کرده تا جستجو در حافظه دقیق‌تر باشد
     cache_key = question.lower().strip()
     if cache_key in response_cache:
         print(f"CACHE HIT: Found response for question: '{question}'")
-        # اگر پاسخ در حافظه بود، آن را برمی‌گردانیم
         return response_cache[cache_key]
     
     print(f"CACHE MISS: No response found for: '{question}'. Calling APIs.")
-    # اگر پاسخ در حافظه نبود، با APIها تماس می‌گیریم
     youtube_link = search_youtube_video(question)
     prompt = f"""
     شما یک دستیار متخصص در زمینه مهاجرت کاری به آلمان هستید.
@@ -77,24 +76,18 @@ def get_ai_response(question: str) -> str:
     try:
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
         response = model.generate_content(prompt)
-        
         ai_response = "پاسخ توسط فیلترهای ایمنی مسدود شد. لطفاً سوال دیگری بپرسید."
         if response.candidates:
             ai_response = response.text
-
-        # --- بخش جدید: ذخیره پاسخ در حافظه پنهان ---
-        # اگر حافظه پر شده بود، قدیمی‌ترین آیتم را حذف کن
         if len(response_cache) >= CACHE_MAX_SIZE:
             response_cache.popitem(last=False)
         response_cache[cache_key] = ai_response
-        
         return ai_response
-        
     except Exception as e:
         print(f"Error connecting to Gemini: {e}")
         return "متاسفانه در ارتباط با هوش مصنوعی مشکلی پیش آمده است."
 
-# --- بخش مدیریت گروه و پیام خصوصی (بدون تغییر) ---
+# --- بخش مدیریت گروه و پیام خصوصی ---
 async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.text:
         return
@@ -120,16 +113,21 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
     ai_response = get_ai_response(user_message)
     await thinking_message.edit_text(ai_response)
 
-# --- بخش زمان‌بندی با asyncio (بدون تغییر) ---
+# --- بخش زمان‌بندی (تغییر یافته) ---
 async def send_scheduled_ad_loop(application: Application) -> None:
+    """یک حلقه بی‌نهایت که پیام تبلیغاتی را به همه گروه‌های هدف ارسال می‌کند."""
     print("Scheduled messages loop started.")
     await asyncio.sleep(10)
     while True:
-        try:
-            await application.bot.send_message(chat_id=TARGET_GROUP_ID, text=AD_MESSAGE)
-            print("Scheduled ad message sent successfully.")
-        except Exception as e:
-            print(f"Error sending scheduled message: {e}")
+        print(f"Sending ad to groups: {TARGET_GROUP_IDS}")
+        # روی لیست شناسه‌ها حرکت کرده و پیام را به هر گروه ارسال می‌کند
+        for group_id in TARGET_GROUP_IDS:
+            try:
+                await application.bot.send_message(chat_id=group_id, text=AD_MESSAGE)
+                print(f"Ad message sent successfully to group {group_id}.")
+            except Exception as e:
+                print(f"Failed to send message to group {group_id}. Error: {e}")
+        # برای 4 ساعت می‌خوابد
         await asyncio.sleep(4 * 3600)
 
 async def post_init(application: Application) -> None:
@@ -139,7 +137,7 @@ def main() -> None:
     application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_group_messages))
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_private_message))
-    print("Group manager and private message bot is running...")
+    print("Multi-group manager bot is running...")
     application.run_polling()
 
 if __name__ == "__main__":
