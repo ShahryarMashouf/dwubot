@@ -1,9 +1,12 @@
 import os
 import asyncio
 import random
+import json # برای چاپ خوانا استفاده می‌شود
 from collections import OrderedDict
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
+
+# این کتابخانه در کد شما با نام YouTubeDataAPI وارد شده بود، نام صحیح آن YoutubeDataApi است
 from youtube_api import YouTubeDataAPI
 import google.generativeai as genai
 
@@ -113,6 +116,11 @@ def get_germany_fact() -> str:
 
 # --- بخش مدیریت گروه و پیام خصوصی ---
 async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # --- بخش جدید: لاگ کردن جزئیات کامل پیام ---
+    print("\n--- New Group Message Received ---")
+    print(json.dumps(update.to_dict(), indent=2, ensure_ascii=False))
+    print("---------------------------------\n")
+
     if not update.message or not update.message.text:
         return
     message = update.message
@@ -134,6 +142,11 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
         await thinking_message.edit_text(ai_response)
 
 async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # --- بخش جدید: لاگ کردن جزئیات کامل پیام ---
+    print("\n--- New Private Message Received ---")
+    print(json.dumps(update.to_dict(), indent=2, ensure_ascii=False))
+    print("----------------------------------\n")
+
     user_message = update.message.text
     print(f"New private message from user {update.message.from_user.username}: {user_message}")
     thinking_message = await update.message.reply_text("🧠 در حال فکر کردن...")
@@ -142,7 +155,6 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
 
 # --- بخش زمان‌بندی با asyncio ---
 async def send_promo_messages_loop(application: Application) -> None:
-    """هر 4 ساعت یک بار، یکی از پیام‌های تبلیغاتی را به صورت متناوب ارسال می‌کند."""
     print("Promotional messages loop started.")
     promo_index = 0
     await asyncio.sleep(15)
@@ -159,7 +171,6 @@ async def send_promo_messages_loop(application: Application) -> None:
         await asyncio.sleep(4 * 3600)
 
 async def send_germany_fact_loop(application: Application) -> None:
-    """هر 2 ساعت یک بار، یک فکت جالب درباره آلمان ارسال می‌کند."""
     print("Germany facts loop started.")
     await asyncio.sleep(10)
     while True:
@@ -175,11 +186,10 @@ async def send_germany_fact_loop(application: Application) -> None:
         await asyncio.sleep(2 * 3600)
 
 async def post_init(application: Application) -> None:
-    """پس از راه‌اندازی ربات، هر دو حلقه زمان‌بندی را در پس‌زمینه اجرا می‌کند."""
     asyncio.create_task(send_promo_messages_loop(application))
     asyncio.create_task(send_germany_fact_loop(application))
 
-# --- بخش اصلی برنامه (تغییر یافته) ---
+# --- بخش اصلی برنامه ---
 async def main() -> None:
     """راه‌اندازی و اجرای ربات با خاموش شدن صحیح."""
     application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
