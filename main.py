@@ -24,10 +24,7 @@ if not all([TELEGRAM_TOKEN, GEMINI_API_KEY, YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID,
 
 YOUTUBE_CHANNEL_LINK = f"https://www.youtube.com/channel/{YOUTUBE_CHANNEL_ID}"
 
-# --- بخش جدید: تعریف پیام‌های متنوع ---
-# لطفاً این بخش را ویرایش کنید
-# --------------------------------------------------------------------------
-# پیام تبلیغ کانال یوتیوب
+# --- تعریف پیام‌های متنوع ---
 YOUTUBE_AD_MESSAGE = f"""
 📢 آیا می‌دانستید تمام مراحل مهاجرت به آلمان را در کانال یوتیوب ما پیدا می‌کنید؟
 
@@ -36,8 +33,6 @@ YOUTUBE_AD_MESSAGE = f"""
 👇 همین حالا عضو شوید 👇
 {YOUTUBE_CHANNEL_LINK}
 """
-
-# پیام تبلیغ خدمات (لطفاً اطلاعات تماس خود را جایگزین کنید)
 SERVICES_AD_MESSAGE = """
 ✨ آیا برای مهاجرت به کمک تخصصی نیاز دارید؟ ✨
 
@@ -48,13 +43,9 @@ SERVICES_AD_MESSAGE = """
 
 برای مشاوره رایگان با ما در تماس باشید: [https://t.me/shahryarmsf]
 """
-# --------------------------------------------------------------------------
-
-# لیست پیام‌های تبلیغاتی که به صورت متناوب ارسال می‌شوند
 PROMO_MESSAGES = [YOUTUBE_AD_MESSAGE, SERVICES_AD_MESSAGE]
-
-FORBIDDEN_WORDS = ['کلاهبردار', 'دروغگو', 'فحش_مثال_۱', 'فحش_مثال_۲']
-TRIGGER_WORDS = ['مهاجرت', 'ویزا', 'آلمان', 'اقامت', 'کار', 'سفارت', 'تحصیلی', 'جاب آفر']
+FORBIDDEN_WORDS = ['کلاهبردار', 'دروغگو', 'کص', 'کیر']
+TRIGGER_WORDS = ['مهاجرت',"آوسبیلدونگ", 'ویزا', 'آلمان', 'اقامت', 'کار', 'سفارت', 'تحصیلی', 'جاب آفر']
 
 # --- بخش هوش مصنوعی و یوتیوب ---
 genai.configure(api_key=GEMINI_API_KEY)
@@ -107,7 +98,6 @@ def get_ai_response(question: str) -> str:
         print(f"Error connecting to Gemini: {e}")
         return "متاسفانه در ارتباط با هوش مصنوعی مشکلی پیش آمده است."
 
-# --- بخش جدید: تولید فکت جالب درباره آلمان ---
 def get_germany_fact() -> str:
     """با استفاده از Gemini یک فکت جالب و کوتاه درباره آلمان تولید می‌کند."""
     try:
@@ -150,7 +140,7 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
     ai_response = get_ai_response(user_message)
     await thinking_message.edit_text(ai_response)
 
-# --- بخش زمان‌بندی بازنویسی شده ---
+# --- بخش زمان‌بندی با asyncio ---
 async def send_promo_messages_loop(application: Application) -> None:
     """هر 4 ساعت یک بار، یکی از پیام‌های تبلیغاتی را به صورت متناوب ارسال می‌کند."""
     print("Promotional messages loop started.")
@@ -189,12 +179,23 @@ async def post_init(application: Application) -> None:
     asyncio.create_task(send_promo_messages_loop(application))
     asyncio.create_task(send_germany_fact_loop(application))
 
-def main() -> None:
+# --- بخش اصلی برنامه (تغییر یافته) ---
+async def main() -> None:
+    """راه‌اندازی و اجرای ربات با خاموش شدن صحیح."""
     application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
+
+    # تعریف دستورها و پردازشگرها
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_group_messages))
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_private_message))
-    print("Multi-group manager bot with diverse scheduled messages is running...")
-    application.run_polling()
+
+    # اجرای ربات با استفاده از context manager برای خاموش شدن صحیح
+    print("Multi-group manager bot is running...")
+    async with application:
+        await application.start()
+        await application.updater.start_polling()
+        # برنامه را تا زمان دریافت سیگنال خاموش شدن، در حال اجرا نگه می‌دارد
+        await asyncio.Future()
 
 if __name__ == "__main__":
-    main()
+    # اجرای برنامه اصلی به صورت آسنکرون
+    asyncio.run(main())
