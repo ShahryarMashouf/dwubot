@@ -1,12 +1,9 @@
 import os
 import asyncio
 import random
-import json # برای چاپ خوانا استفاده می‌شود
 from collections import OrderedDict
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
-
-# این کتابخانه در کد شما با نام YouTubeDataAPI وارد شده بود، نام صحیح آن YoutubeDataApi است
 from youtube_api import YouTubeDataAPI
 import google.generativeai as genai
 
@@ -102,7 +99,6 @@ def get_ai_response(question: str) -> str:
         return "متاسفانه در ارتباط با هوش مصنوعی مشکلی پیش آمده است."
 
 def get_germany_fact() -> str:
-    """با استفاده از Gemini یک فکت جالب و کوتاه درباره آلمان تولید می‌کند."""
     try:
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
         prompt = "به زبان فارسی، یک حقیقت جالب، کوتاه و کمتر شنیده شده درباره کشور آلمان بگو. (فقط خود فکت را بگو، بدون هیچ جمله اضافه‌ای)"
@@ -116,11 +112,6 @@ def get_germany_fact() -> str:
 
 # --- بخش مدیریت گروه و پیام خصوصی ---
 async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # --- بخش جدید: لاگ کردن جزئیات کامل پیام ---
-    print("\n--- New Group Message Received ---")
-    print(json.dumps(update.to_dict(), indent=2, ensure_ascii=False))
-    print("---------------------------------\n")
-
     if not update.message or not update.message.text:
         return
     message = update.message
@@ -142,11 +133,6 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
         await thinking_message.edit_text(ai_response)
 
 async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # --- بخش جدید: لاگ کردن جزئیات کامل پیام ---
-    print("\n--- New Private Message Received ---")
-    print(json.dumps(update.to_dict(), indent=2, ensure_ascii=False))
-    print("----------------------------------\n")
-
     user_message = update.message.text
     print(f"New private message from user {update.message.from_user.username}: {user_message}")
     thinking_message = await update.message.reply_text("🧠 در حال فکر کردن...")
@@ -189,23 +175,19 @@ async def post_init(application: Application) -> None:
     asyncio.create_task(send_promo_messages_loop(application))
     asyncio.create_task(send_germany_fact_loop(application))
 
-# --- بخش اصلی برنامه ---
-async def main() -> None:
-    """راه‌اندازی و اجرای ربات با خاموش شدن صحیح."""
+# --- بخش اصلی برنامه (بازنویسی شده به نسخه پایدار) ---
+def main() -> None:
+    """راه‌اندازی و اجرای ربات."""
     application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
 
     # تعریف دستورها و پردازشگرها
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_group_messages))
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_private_message))
 
-    # اجرای ربات با استفاده از context manager برای خاموش شدن صحیح
     print("Multi-group manager bot is running...")
-    async with application:
-        await application.start()
-        await application.updater.start_polling()
-        # برنامه را تا زمان دریافت سیگنال خاموش شدن، در حال اجرا نگه می‌دارد
-        await asyncio.Future()
+    # این تابع ربات را اجرا کرده و تا زمان متوقف شدن، آن را فعال نگه می‌دارد
+    # و به درستی تمام بخش‌ها از جمله post_init را راه‌اندازی می‌کند.
+    application.run_polling()
 
 if __name__ == "__main__":
-    # اجرای برنامه اصلی به صورت آسنکرون
-    asyncio.run(main())
+    main()
