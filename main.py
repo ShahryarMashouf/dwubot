@@ -4,7 +4,7 @@ import random
 from collections import OrderedDict
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from youtube_api import YouTubeDataAPI
+from youtube_api import YouTubeDatAPI
 import google.generativeai as genai
 
 # --- بخش تنظیمات حافظه پنهان (Cache) ---
@@ -30,7 +30,7 @@ YOUTUBE_AD_MESSAGE = f"""
 
 از پیدا کردن کار تا گرفتن ویزا و زندگی در آلمان، همه چیز را به صورت ویدیویی و رایگان توضیح داده‌ایم!
 
-👇 همین حالا عضو شوید 👇
+👇 همین حالا عضو شوید �
 {YOUTUBE_CHANNEL_LINK}
 """
 SERVICES_AD_MESSAGE = """
@@ -39,17 +39,19 @@ SERVICES_AD_MESSAGE = """
 تیم ما خدمات زیر را با بالاترین کیفیت ارائه می‌دهد:
 🇩🇪 تدریس خصوصی و گروهی زبان آلمانی (از A1 تا C1)
 🇬🇧 تدریس خصوصی و گروهی زبان انگلیسی
-📄 نوشتن رزومه (Lebenslauf) و انگیزه‌نامه (Motivationsschreiben) حرفه‌ای
+📄 نوشتن رزومه (Lebenslauf) و انگیزه‌نامه(Motivationsschreiben) و نامه درخواست کار(Anschreiben)حرفه‌ای
 
 برای مشاوره رایگان با ما در تماس باشید: [https://t.me/shahryarmsf]
 """
 PROMO_MESSAGES = [YOUTUBE_AD_MESSAGE, SERVICES_AD_MESSAGE]
+
 FORBIDDEN_WORDS = ['کلاهبردار', 'دروغگو', 'کص', 'کیر']
 TRIGGER_WORDS = ['مهاجرت',"آوسبیلدونگ", 'ویزا', 'آلمان', 'اقامت', 'کار', 'سفارت', 'تحصیلی', 'جاب آفر']
 
+
 # --- بخش هوش مصنوعی و یوتیوب ---
 genai.configure(api_key=GEMINI_API_KEY)
-yt_api = YouTubeDataAPI(YOUTUBE_API_KEY)
+yt_api = YouTubeDatAPI(YOUTUBE_API_KEY)
 
 def search_youtube_video(query: str) -> str:
     try:
@@ -98,18 +100,6 @@ def get_ai_response(question: str) -> str:
         print(f"Error connecting to Gemini: {e}")
         return "متاسفانه در ارتباط با هوش مصنوعی مشکلی پیش آمده است."
 
-def get_germany_fact() -> str:
-    try:
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
-        prompt = "به زبان فارسی، یک حقیقت جالب، کوتاه و کمتر شنیده شده درباره کشور آلمان بگو. (فقط خود فکت را بگو، بدون هیچ جمله اضافه‌ای)"
-        response = model.generate_content(prompt)
-        if response.candidates:
-            return response.text
-        return "مشکلی در تولید فکت پیش آمد."
-    except Exception as e:
-        print(f"Error generating Germany fact: {e}")
-        return "امروز فکتی برای گفتن ندارم!"
-
 # --- بخش مدیریت گروه و پیام خصوصی ---
 async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.text:
@@ -141,6 +131,7 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
 
 # --- بخش زمان‌بندی با asyncio ---
 async def send_promo_messages_loop(application: Application) -> None:
+    """هر 10 ساعت یک بار، یکی از پیام‌های تبلیغاتی را به صورت متناوب ارسال می‌کند."""
     print("Promotional messages loop started.")
     promo_index = 0
     await asyncio.sleep(15)
@@ -154,28 +145,14 @@ async def send_promo_messages_loop(application: Application) -> None:
             except Exception as e:
                 print(f"Failed to send promo message to group {group_id}. Error: {e}")
         promo_index = (promo_index + 1) % len(PROMO_MESSAGES)
-        await asyncio.sleep(4 * 3600)
-
-async def send_germany_fact_loop(application: Application) -> None:
-    print("Germany facts loop started.")
-    await asyncio.sleep(10)
-    while True:
-        fact = get_germany_fact()
-        message_to_send = f"🇩🇪 آیا می‌دانستید؟\n\n{fact}"
-        print(f"Sending Germany fact to groups: {TARGET_GROUP_IDS}")
-        for group_id in TARGET_GROUP_IDS:
-            try:
-                await application.bot.send_message(chat_id=group_id, text=message_to_send)
-                print(f"Germany fact sent successfully to group {group_id}.")
-            except Exception as e:
-                print(f"Failed to send fact to group {group_id}. Error: {e}")
-        await asyncio.sleep(2 * 3600)
+        # زمان انتظار به 10 ساعت تغییر یافت
+        await asyncio.sleep(10 * 3600)
 
 async def post_init(application: Application) -> None:
+    """پس از راه‌اندازی ربات، حلقه زمان‌بندی را در پس‌زمینه اجرا می‌کند."""
     asyncio.create_task(send_promo_messages_loop(application))
-    asyncio.create_task(send_germany_fact_loop(application))
 
-# --- بخش اصلی برنامه (بازنویسی شده به نسخه پایدار) ---
+# --- بخش اصلی برنامه ---
 def main() -> None:
     """راه‌اندازی و اجرای ربات."""
     application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
@@ -185,9 +162,8 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_private_message))
 
     print("Multi-group manager bot is running...")
-    # این تابع ربات را اجرا کرده و تا زمان متوقف شدن، آن را فعال نگه می‌دارد
-    # و به درستی تمام بخش‌ها از جمله post_init را راه‌اندازی می‌کند.
     application.run_polling()
 
 if __name__ == "__main__":
     main()
+�
