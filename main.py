@@ -4,7 +4,7 @@ import random
 from collections import OrderedDict
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from youtube_api import YouTubeDatAPI
+from youtube_api import YouTubeDataAPI
 import google.generativeai as genai
 
 # --- بخش تنظیمات حافظه پنهان (Cache) ---
@@ -30,7 +30,7 @@ YOUTUBE_AD_MESSAGE = f"""
 
 از پیدا کردن کار تا گرفتن ویزا و زندگی در آلمان، همه چیز را به صورت ویدیویی و رایگان توضیح داده‌ایم!
 
-👇 همین حالا عضو شوید �
+👇 همین حالا عضو شوید 👇
 {YOUTUBE_CHANNEL_LINK}
 """
 SERVICES_AD_MESSAGE = """
@@ -44,14 +44,12 @@ SERVICES_AD_MESSAGE = """
 برای مشاوره رایگان با ما در تماس باشید: [https://t.me/shahryarmsf]
 """
 PROMO_MESSAGES = [YOUTUBE_AD_MESSAGE, SERVICES_AD_MESSAGE]
-
 FORBIDDEN_WORDS = ['کلاهبردار', 'دروغگو', 'کص', 'کیر']
 TRIGGER_WORDS = ['مهاجرت',"آوسبیلدونگ", 'ویزا', 'آلمان', 'اقامت', 'کار', 'سفارت', 'تحصیلی', 'جاب آفر']
 
-
 # --- بخش هوش مصنوعی و یوتیوب ---
 genai.configure(api_key=GEMINI_API_KEY)
-yt_api = YouTubeDatAPI(YOUTUBE_API_KEY)
+yt_api = YouTubeDataAPI(YOUTUBE_API_KEY)
 
 def search_youtube_video(query: str) -> str:
     try:
@@ -141,7 +139,7 @@ async def send_promo_messages_loop(application: Application) -> None:
         for group_id in TARGET_GROUP_IDS:
             try:
                 await application.bot.send_message(chat_id=group_id, text=message_to_send)
-                print(f"Promo message sent successfully to group {group_id}.")
+                print(f"Ad message sent successfully to group {group_id}.")
             except Exception as e:
                 print(f"Failed to send promo message to group {group_id}. Error: {e}")
         promo_index = (promo_index + 1) % len(PROMO_MESSAGES)
@@ -166,4 +164,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-�
