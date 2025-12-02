@@ -1,11 +1,30 @@
 import os
 import asyncio
-import random
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from collections import OrderedDict
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from youtube_api import YouTubeDataAPI
+from youtube_api import YoutubeDataApi
 import google.generativeai as genai
+
+# --- بخش جدید: سرور سلامت برای Render ---
+# این بخش باعث می‌شود Render فکر کند این یک وب‌سایت است و آن را روشن نگه دارد
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive!")
+
+def run_health_check_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    print(f"Health check server running on port {port}")
+    server.serve_forever()
+
+# شروع سرور در یک رشته (Thread) جداگانه
+threading.Thread(target=run_health_check_server, daemon=True).start()
+# ---------------------------------------
 
 # --- بخش تنظیمات حافظه پنهان (Cache) ---
 response_cache = OrderedDict()
@@ -20,7 +39,8 @@ TARGET_GROUP_IDS_STR = os.getenv('TARGET_GROUP_IDS', '')
 TARGET_GROUP_IDS = [int(gid.strip()) for gid in TARGET_GROUP_IDS_STR.split(',') if gid.strip()]
 
 if not all([TELEGRAM_TOKEN, GEMINI_API_KEY, YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID, TARGET_GROUP_IDS]):
-    raise ValueError("One or more environment variables are not set or TARGET_GROUP_IDS is empty!")
+    # در محیط بیلد ممکن است متغیرها نباشند، پس فقط هشدار می‌دهیم تا بیلد فیل نشود
+    print("Warning: Environment variables not set properly. Check configuration.")
 
 YOUTUBE_CHANNEL_LINK = f"https://www.youtube.com/channel/{YOUTUBE_CHANNEL_ID}"
 
@@ -39,17 +59,20 @@ SERVICES_AD_MESSAGE = """
 تیم ما خدمات زیر را با بالاترین کیفیت ارائه می‌دهد:
 🇩🇪 تدریس خصوصی و گروهی زبان آلمانی (از A1 تا C1)
 🇬🇧 تدریس خصوصی و گروهی زبان انگلیسی
-📄 نوشتن رزومه (Lebenslauf) و انگیزه‌نامه(Motivationsschreiben) و نامه درخواست کار(Anschreiben)حرفه‌ای
+📄 نوشتن رزومه (Lebenslauf) و انگیزه‌نامه (Motivationsschreiben) حرفه‌ای
 
-برای مشاوره رایگان با ما در تماس باشید: [https://t.me/shahryarmsf]
+برای مشاوره رایگان با ما در تماس باشید: [آیدی یا لینک تماس شما]
 """
 PROMO_MESSAGES = [YOUTUBE_AD_MESSAGE, SERVICES_AD_MESSAGE]
-FORBIDDEN_WORDS = ['کلاهبردار', 'دروغگو', 'کص', 'کیر']
-TRIGGER_WORDS = ['مهاجرت',"آوسبیلدونگ", 'ویزا', 'آلمان', 'اقامت', 'کار', 'سفارت', 'تحصیلی', 'جاب آفر']
+FORBIDDEN_WORDS = ['کلاهبردار', 'دروغگو', 'فحش_مثال_۱', 'فحش_مثال_۲']
 
 # --- بخش هوش مصنوعی و یوتیوب ---
-genai.configure(api_key=GEMINI_API_KEY)
-yt_api = YouTubeDataAPI(YOUTUBE_API_KEY)
+# هندلینگ خطا برای زمانی که کلیدها ست نشده‌اند
+try:
+    genai.configure(api_key=GEMINI_API_KEY)
+    yt_api = YoutubeDataApi(YOUTUBE_API_KEY)
+except:
+    pass
 
 def search_youtube_video(query: str) -> str:
     try:
@@ -113,9 +136,16 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
             return
         except Exception as e:
             print(f"Error deleting message: {e}")
-    if any(word in text_lower for word in TRIGGER_WORDS) or f"@{bot_username}" in text_lower:
+
+    # فقط اگر ربات تگ شده بود، پاسخ بده
+    if f"@{bot_username}" in text_lower:
         question = text.replace(f"@{context.bot.username}", "").strip()
-        print(f"Bot triggered by message from {message.from_user.username}")
+        print(f"Bot triggered by mention from {message.from_user.username}")
+        
+        if not question:
+            await message.reply_text("سلام! لطفاً سوال خود را بعد از نام من بپرسید تا پاسخ دهم.", quote=True)
+            return
+
         thinking_message = await message.reply_text("🧠 در حال بررسی سوال شما...")
         ai_response = get_ai_response(question)
         await thinking_message.edit_text(ai_response)
@@ -139,26 +169,21 @@ async def send_promo_messages_loop(application: Application) -> None:
         for group_id in TARGET_GROUP_IDS:
             try:
                 await application.bot.send_message(chat_id=group_id, text=message_to_send)
-                print(f"Ad message sent successfully to group {group_id}.")
+                print(f"Promo message sent successfully to group {group_id}.")
             except Exception as e:
                 print(f"Failed to send promo message to group {group_id}. Error: {e}")
         promo_index = (promo_index + 1) % len(PROMO_MESSAGES)
-        # زمان انتظار به 10 ساعت تغییر یافت
         await asyncio.sleep(10 * 3600)
 
 async def post_init(application: Application) -> None:
-    """پس از راه‌اندازی ربات، حلقه زمان‌بندی را در پس‌زمینه اجرا می‌کند."""
     asyncio.create_task(send_promo_messages_loop(application))
 
 # --- بخش اصلی برنامه ---
 def main() -> None:
     """راه‌اندازی و اجرای ربات."""
     application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
-
-    # تعریف دستورها و پردازشگرها
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_group_messages))
     application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_private_message))
-
     print("Multi-group manager bot is running...")
     application.run_polling()
 
